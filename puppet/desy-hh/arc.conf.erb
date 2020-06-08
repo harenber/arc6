@@ -1,0 +1,179 @@
+#
+# puppet: ./modules/arc_ce/templates/etc/arc7.conf.erb
+#   Assuming CentOS 8 only
+#         (Attention: changes will be overwritten by puppet)
+#
+
+# RUNTIME_ENABLE_MULTICORE_SCRATCH is no longer needed, codebase is updated long time ago
+
+[common]
+hostname=<%= @fqdn %>
+
+# in arc5.conf [group/users] was defined but NOT used! review if you need this LCAS integration at all
+[authgroup:lcas]
+plugin=5 /usr/libexec/arc/arc-lcas %D %P liblcas.so /usr/lib64 /etc/lcas/lcas.db
+
+###########
+## EXAMPLE
+# [authgroup:desy]
+# voms = desy * * *
+
+
+## puppet template common:authvo
+<% @arc_ce_authorized_vos.each do |authzvo| -%>
+[authgroup:<%= authzvo %>]
+voms = <%= authzvo %> * * *
+<% end -%>
+## puppet template common:authvo //
+
+[authgroup:users]
+
+###########
+# EXAMPLE
+# [authgroup:users]
+# authgroup = desy
+# authgroup = lcas
+
+## puppet template common:authuser
+<% @arc_ce_authorized_vos.each do |authzvo| -%>
+authgroup = <%= authzvo %>
+<% end -%>
+## puppet template common:authuser //
+
+[mapping]
+# LCMAPS mapping
+map_with_plugin = users 30 /usr/libexec/arc/arc-lcmaps %D %P liblcmaps.so /usr/lib64 /etc/lcmaps/lcmaps.db arc
+# I have a guess you are not using LCMAPS for ARGUS integration, just local mapping on-host. It is true?
+# If so I can recommend you to move from LCMAPS (with non-trivial configuration) to ARC native map_to_pool functionality that is much simpler, look here: http://www.nordugrid.org/documents/arc6/admins/details/auth_and_mapping.html#example-mapping-to-the-accounts-pool
+# And example is on the bottom of config (commented out)
+
+[lrms]
+lrms=<%= @arc_ce_lrms %> <%= @arc_ce_defaultqueue %>
+
+[arex]
+loglevel=2
+mail=grid@desy.de
+maxjobs = 20000 20000 20000 20000 -1
+# consider lower values to improve performance
+defaultttl=345600 172800
+wakeupperiod=120
+sessiondir=/var/spool/arc/grid
+# do you have any custom runtimes? e.g. NOT ENV/PROXY
+# comment out "runtimedir" if no and enable RTE (see bottom)
+# NOTE also, the "runtimedir" should not be shared in ARC 6
+runtimedir=/etc/arc/runtime
+shared_filesystem=no
+scratchdir=/var/jobs
+# no longer needed, use per-queue authgroup instead
+#statecallout=ACCEPTED 60 /usr/libexec/arc/arc-vomsac-check -L %C/job.%I.local -P %C/job.%I.proxy
+
+[arex/ws]
+max_data_transfer_requests = 150
+max_job_control_requests=200
+max_infosys_requests=3 
+
+[arex/ws/jobs]
+allowaccess=users
+
+[arex/jura]
+
+[arex/jura/apel:EGI]
+targeturl=https://mq.cro-ngi.hr:6162
+topic=/queue/global.accounting.cpu.central
+gocdb_name=YOURSITE
+
+[gridftpd]
+loglevel=3
+globus_tcp_port_range=20000,24999
+globus_udp_port_range=20000,24999
+maxconnections=300
+
+[gridftpd/jobs]
+allowaccess=users
+
+[infosys]
+loglevel=1
+
+[infosys/ldap]
+
+[infosys/nordugrid]
+
+[infosys/glue1]
+resource_location=YOURCITY
+resource_longitude=0.
+resource_latitude=0.
+cpu_scaling_reference_si00=1234
+processor_other_description=Cores=12.34,Benchmark=12.3-HEP-SPEC06
+glue_site_web=http://your.url
+glue_site_unique_id=YOURSITEID
+
+[infosys/glue2]
+admindomain_name=YOURSITEID
+admindomain_owner=YOUR@MAIL.FOO
+admindomain_www=http://your.url
+admindomain_description=Job and connection information are stored for accounting purposed and to safeguard the infrastructure against misuse. For details on general DESY data protection provisioning see http://www.desy.de/imprint/index_eng.html
+
+[infosys/cluster]
+alias=DESY-HH ARC CE
+comment=DESY-HH ARC CE
+clustersupport=grid@desy.de
+cluster_location=DE_22607
+homogeneity=True
+architecture=x86_64
+nodecpu=adotf
+osname=centos
+osversion=7.8
+opsys=CentOS-7.6
+# do you really have only 4GB RAM on nodes?
+nodememory=4096
+nodeaccess=outbound
+advertisedvo=belle
+advertisedvo=desy
+advertisedvo=ops
+
+[queue:queuename]
+comment=COMMENTY COMMENTY 
+maxslotsperjob=8
+defaultmemory=2048
+osname=CentOS
+osversion=7.8
+# patched in /usr/share/arc/glue-generator.pl
+maxcputime=3600
+maxwalltime=5760
+totalcpus=12344
+benchmark=HEPSPEC 12.34
+benchmark=SPECINT2000 1234
+benchmark=SPECFP2000 1234
+condor_requirements=OpSysAndVer == "CentOS7" && GRID_RESOURCE == true && NODE_IS_HEALTHY
+
+# as you have single queue and authorize all VOs anyway, this can be omitted due to interface-level restrictions in place
+#allowaccess = belle
+#allowaccess = desy
+#allowaccess = ops
+
+###
+### RTEs
+###
+
+# Most probably you need ENV/PROXY, enable it with:
+#
+# [root ~]# arcctl rte enable ENV/PROXY
+
+
+###
+### MAPPING WITH ARC POOLS EXAMPLE
+###
+
+#[mapping]
+#map_to_pool = belle /etc/grid-security/pool/belle
+#map_to_pool = desy /etc/grid-security/pool/desy
+#map_to_pool = ops /etc/grid-security/pool/ops
+
+#And the "pool" file in the directoty contains e.g. [root ~]# cat /etc/grid-security/pool/desy/pool
+#desy01
+#desy02
+#desy03
+#...
+
+# This is way simpler to manage than LCMAPS
+
